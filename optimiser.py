@@ -35,10 +35,7 @@ class Optimiser(object):
         print 'Calculating initial scores...'
         self.global_best_score = self.Scorer.score(initial_assignment)
         self.global_best_assignment = initial_assignment
-        self.done_worse = 0
-        self.stayed_put = 0
-        self.i = 0
-        self.resets = 0
+        self._reset_counts()
 
     def _reset_counts(self):
         self.done_worse = 0
@@ -122,6 +119,23 @@ class Optimiser(object):
                 for x in assignment.partition_vector)
         return Partition(tuple(pvec))
 
+    def merge_closest(self, assignment):
+        print 'Finding clusters to merge...'
+        clusters = self.get_clusters(assignment)
+        best_score = -np.inf
+
+        for i in clusters:
+            for j in clusters:
+                if i == j:
+                    continue
+                test_assignment = self.merge(assignment, i, j)
+                score = self.Scorer.score(assignment)
+                if score > best_score:
+                    best_score = score
+                    best_assignment = test_assignment
+
+        return(best_assignment)
+
     def split(self, k, assignment=None):
         """
         Function to split cluster based on least representative alignment
@@ -130,21 +144,23 @@ class Optimiser(object):
         members = self.get_clusters(assignment)[k]
         tree_scores = {}
         cluster_record = self.Scorer.concatenate(members)
-        print cluster_record
+        print 'Calculating tree scores for cluster {0}...'.format(k)
 
         for i in members:
             tree = self.Collection.records[i].tree
             tree_scores[i] = self.test(cluster_record, tree)
+            print '.'
 
         print tree_scores
 
         seed, min_score = min(tree_scores.iteritems(), key=operator.itemgetter(1))
-        print 'Splitting on {0}.'.format(seed)
+        print 'Splitting on record {0}.'.format(seed)
 
         new_assignment = list(assignment.partition_vector)
         self.nclusters += 1
         new_assignment[seed] = self.nclusters
         print 'New Partition: {0}'.format(new_assignment)
+        print 'Assigning to new Partition...'
 
         new_assignment = Partition(new_assignment)
         scores = self.score_sample(members, new_assignment)
@@ -153,14 +169,19 @@ class Optimiser(object):
 
         return assignment
 
-    def split_max_var(self, assignment):
+    def split_max_var(self, assignment=None):
+        assignment = assignment or self.global_best_assignment
         clusters = self.get_clusters(assignment)
+        var_dict = {}
+
         for k in clusters.keys():
-            var_dict[k] = var(clusters[k])
+            var_dict[k] = self.var(clusters[k])
 
         cluster_to_split, var = max(clusters.iteritems(), key=operator.itemgetter(1))
 
-        return split(cluster_to_split, assignment)
+        print 'Highest var found in {0}...'.format(cluster_to_split)
+
+        return self.split(cluster_to_split, assignment)
 
     def test(self, record, tree, model='WAG'):
         """
@@ -231,6 +252,8 @@ class Optimiser(object):
                 self.done_worse += 1
             print self._status()
             self.i += 1
+
+        # Final Assignment?
 
         print self._status()
         self._reset_counts()

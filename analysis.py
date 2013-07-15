@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 from __future__ import print_function
+from treeCl.lib.remote.utils import fileIO
 import matplotlib.pyplot as plt
 import numpy as np
 import sys
@@ -9,7 +10,7 @@ import os
 
 
 PATTERNS = {'ll': re.compile(r'Likelihood score:(\-?\d+\.\d+)'),
-            'cluster': re.compile(r'(\(.*\))'),
+            'cluster': re.compile(r'([\(\[].*[\]\)])'),
             'uniq': re.compile(r'[A-Z0-9]{6}$')}
 
 
@@ -45,7 +46,7 @@ class Result(object):
             data = np.asarray(self.timeseries())
         else:
             data = np.asarray(self.by_iteration())
-        plt.plot(data[:, 0], data[:, 1]) # WHERE IS PLOT OBJECT STORED
+        plt.plot(data[:, 0], data[:, 1])
         filename = name + '.' + ext
         plt.xlabel = 'System Time'
         plt.ylabel = 'Log Likelihood'
@@ -75,6 +76,8 @@ def fileparser(f):
             break
         history.append((time, score))
 
+    print(likelihood, clusters, history, uniq_id)
+
     result = Result(likelihood, clusters, history, uniq_id)
     return(result)
 
@@ -92,3 +95,29 @@ def foldersearch(folderpath, info=None):
         results.append(result)
 
     return(results)
+
+if __name__ == '__main__':
+    import argparse
+    parser = argparse.ArgumentParser(prog=fileIO.basename(__file__),
+                                     description='Results Parser')
+    parser.add_argument('-i', '--inputfolder', default='./')
+    args = parser.parse_args()
+
+    folder = args.inputfolder
+
+    results = foldersearch(folder)
+
+    plt.hold(False)
+
+    for r in results:
+        plotname = 'plot_' + str(r.id)
+        r.plot(plotname, 'png')
+
+    lls = [r.likelihood for r in results]
+    times = [r.cputime for r in results]
+
+    print('Mean Likelihood:' + str(np.mean(lls)))
+    print('Mean time:' + str(np.mean(times)))
+
+    plt.scatter(times, lls)
+    plt.savefig('scatterplot')
